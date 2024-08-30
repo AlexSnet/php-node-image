@@ -214,7 +214,8 @@ ADD --chmod=0755 ./install-php-extensions /usr/local/bin/
 RUN install-php-extensions sodium \
 	intl soap mbstring \
 	json iconv hash exif \
-	xsl pdo_pgsql pgsql gd
+	xsl pdo_pgsql pgsql gd \
+	ldap
 
 ENTRYPOINT ["docker-php-entrypoint"]
 WORKDIR /var/www/html
