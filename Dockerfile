@@ -266,7 +266,12 @@ RUN set -eux; \
 
 
 # Installing Python
-RUN apk add py3-scikit-learn py3-scipy py3-numpy py3-pandas py3-openpyxl
+RUN apk add --no-cache \
+	py3-scikit-learn \
+	py3-scipy \
+	py3-numpy \
+	py3-pandas \
+	py3-openpyxl
 
 # Installing Node
 RUN curl -sL https://unofficial-builds.nodejs.org/download/release/v14.17.6/node-v14.17.6-linux-x64-musl.tar.gz | tar xz -C /usr/local --strip-components=1
