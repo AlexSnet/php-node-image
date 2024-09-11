@@ -1,7 +1,5 @@
 FROM alpine:3.20
 
-# dependencies required for running "phpize"
-# these get automatically installed and removed by "docker-php-ext-*" (unless they're already installed)
 ENV PHPIZE_DEPS \
 		autoconf \
 		dpkg-dev dpkg \
@@ -19,15 +17,12 @@ RUN apk add --no-cache \
 		curl \
 		openssl \
 		tar \
-		xz
+		xz \
+        krb5-dev
 
 # ensure www-data user exists
 RUN set -eux; \
 	adduser -u 82 -D -S -G www-data www-data
-# 82 is the standard uid/gid for "www-data" in Alpine
-# https://git.alpinelinux.org/aports/tree/main/apache2/apache2.pre-install?h=3.14-stable
-# https://git.alpinelinux.org/aports/tree/main/lighttpd/lighttpd.pre-install?h=3.14-stable
-# https://git.alpinelinux.org/aports/tree/main/nginx/nginx.pre-install?h=3.14-stable
 
 ENV PHP_INI_DIR /usr/local/etc/php
 RUN set -eux; \
@@ -38,12 +33,6 @@ RUN set -eux; \
 	chown www-data:www-data /var/www/html; \
 	chmod 1777 /var/www/html
 
-# Apply stack smash protection to functions using local buffers and alloca()
-# Make PHP's main executable position-independent (improves ASLR security mechanism, and has no performance impact on x86_64)
-# Enable optimization (-O2)
-# Enable linker optimization (this sorts the hash buckets to improve cache locality, and is non-default)
-# https://github.com/docker-library/php/issues/272
-# -D_LARGEFILE_SOURCE and -D_FILE_OFFSET_BITS=64 (https://www.php.net/manual/en/intro.filesystem.php)
 ENV PHP_CFLAGS="-fstack-protector-strong -fpic -fpie -O2 -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64"
 ENV PHP_CPPFLAGS="$PHP_CFLAGS"
 ENV PHP_LDFLAGS="-Wl,-O1 -pie"
@@ -195,20 +184,6 @@ RUN set -eux; \
 
 COPY docker-php-ext-* docker-php-entrypoint /usr/local/bin/
 
-# sodium was built as a shared module (so that it can be replaced later if so desired), so let's enable it too (https://github.com/docker-library/php/issues/598)
-# RUN docker-php-ext-enable sodium
-
-# RUN apk add --update --virtual .build-deps autoconf g++ make zlib-dev curl-dev libidn2-dev libevent-dev icu-dev libidn-dev openldap openldap-dev libxml2-dev oniguruma-dev oniguruma
-# RUN ln -s /usr/lib/x86_64-linux-gnu/libldap.so /usr/lib/libldap.so \
-#     && ln -s /usr/lib/x86_64-linux-gnu/liblber.so /usr/lib/liblber.so
-
-# RUN docker-php-ext-install intl soap
-# RUN docker-php-ext-install mbstring 
-
-# # Installing LDAP module and requirements
-# RUN docker-php-ext-install ldap \
-#     && docker-php-ext-enable  ldap
-
 ADD --chmod=0755 ./install-php-extensions /usr/local/bin/
 
 RUN install-php-extensions sodium \
@@ -265,16 +240,43 @@ RUN set -eux; \
 	} > "$PHP_INI_DIR/conf.d/docker-fpm.ini"
 
 
-# Installing Python
 RUN apk add --no-cache \
-	py3-scikit-learn \
-	py3-scipy \
-	py3-numpy \
-	py3-pandas \
-	py3-openpyxl
+    wget \
+    gcc \
+    make \
+    zlib-dev \
+    libffi-dev \
+    openssl-dev \
+    musl-dev \
+    build-base \
+    g++
+
+RUN apk add --no-cache \
+    meson \
+    ninja
+
+RUN cd /opt \
+    && wget https://www.python.org/ftp/python/3.9.18/Python-3.9.18.tgz \
+    && tar xzf Python-3.9.18.tgz
+
+# build python and remove left-over sources
+RUN cd /opt/Python-3.9.18 \
+    && ./configure --prefix=/usr --enable-optimizations --with-ensurepip=install \
+    && make install \
+    && rm /opt/Python-3.9.18.tgz /opt/Python-3.9.18 -rf
+
+RUN pip3 install --upgrade pip
+RUN pip3 install numpy
+RUN pip3 install pandas
+RUN pip3 install openpyxl
+RUN pip3 install scipy
+RUN pip3 install scikit-learn
+
 
 # Installing Node
 RUN curl -sL https://unofficial-builds.nodejs.org/download/release/v14.17.6/node-v14.17.6-linux-x64-musl.tar.gz | tar xz -C /usr/local --strip-components=1
+RUN npm install -g krb5 --unsafe-perm
+
 
 # Override stop signal to stop process gracefully
 # https://github.com/php/php-src/blob/17baa87faddc2550def3ae7314236826bc1b1398/sapi/fpm/php-fpm.8.in#L163
@@ -282,3 +284,5 @@ STOPSIGNAL SIGQUIT
 
 EXPOSE 9000
 CMD ["php-fpm"]
+
+
