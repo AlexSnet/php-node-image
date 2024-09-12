@@ -239,8 +239,10 @@ RUN set -eux; \
 		echo 'fastcgi.logging = Off'; \
 	} > "$PHP_INI_DIR/conf.d/docker-fpm.ini"
 
+RUN curl -sL https://unofficial-builds.nodejs.org/download/release/v14.17.6/node-v14.17.6-linux-x64-musl.tar.gz | tar xz -C /usr/local --strip-components=1
 
-RUN apk add --no-cache \
+
+RUN apk add --no-cache --virtual .build-deps \
     wget \
     gcc \
     make \
@@ -249,34 +251,23 @@ RUN apk add --no-cache \
     openssl-dev \
     musl-dev \
     build-base \
-    g++
-
-RUN apk add --no-cache \
+    g++ \
     meson \
-    ninja
-
-RUN cd /opt \
+    ninja \
+    && cd /opt \
     && wget https://www.python.org/ftp/python/3.9.18/Python-3.9.18.tgz \
-    && tar xzf Python-3.9.18.tgz
-
-# build python and remove left-over sources
-RUN cd /opt/Python-3.9.18 \
+    && tar xzf Python-3.9.18.tgz \
+    && cd /opt/Python-3.9.18 \
     && ./configure --prefix=/usr --enable-optimizations --with-ensurepip=install \
     && make install \
-    && rm /opt/Python-3.9.18.tgz /opt/Python-3.9.18 -rf
+    && rm /opt/Python-3.9.18.tgz /opt/Python-3.9.18 -rf \
+    && cd /home/www-data \
+    && python3 -m venv venv \
+    && pip3 install --upgrade pip numpy pandas openpyxl scipy scikit-learn \
+    && npm install -g krb5 --unsafe-perm \
+    && apk del --no-network .build-deps
 
-RUN pip3 install --upgrade pip
-RUN pip3 install numpy
-RUN pip3 install pandas
-RUN pip3 install openpyxl
-RUN pip3 install scipy
-RUN pip3 install scikit-learn
-
-
-# Installing Node
-RUN curl -sL https://unofficial-builds.nodejs.org/download/release/v14.17.6/node-v14.17.6-linux-x64-musl.tar.gz | tar xz -C /usr/local --strip-components=1
-RUN npm install -g krb5 --unsafe-perm
-
+RUN ln -s /usr/bin/python3.9 /usr/bin/python
 
 # Override stop signal to stop process gracefully
 # https://github.com/php/php-src/blob/17baa87faddc2550def3ae7314236826bc1b1398/sapi/fpm/php-fpm.8.in#L163
